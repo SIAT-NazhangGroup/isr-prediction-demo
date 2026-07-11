@@ -1,0 +1,93 @@
+{
+  "features": [
+    "Mean_nwi_Total",
+    "Residual_stenosis_rate",
+    "Mean_lumen_area(mm²)_Total",
+    "wavelet-HLL_glcm_Correlation",
+    "original_shape_Flatness",
+    "Max_nwi_Total",
+    "TC"
+  ],
+  "display": {
+    "Mean_nwi_Total": "Mean_nwi_Total",
+    "Residual_stenosis_rate": "Residual_stenosis_rate",
+    "Mean_lumen_area(mm²)_Total": "Mean_lumen_area_Total",
+    "wavelet-HLL_glcm_Correlation": "wavelet-HLL_glcm_Correlation",
+    "original_shape_Flatness": "original_shape_Flatness",
+    "Max_nwi_Total": "Max_nwi_Total",
+    "TC": "TC"
+  },
+  "units": {
+    "Mean_nwi_Total": "无量纲",
+    "Residual_stenosis_rate": "比例 (0–1)",
+    "Mean_lumen_area(mm²)_Total": "mm²",
+    "wavelet-HLL_glcm_Correlation": "无量纲",
+    "original_shape_Flatness": "无量纲",
+    "Max_nwi_Total": "无量纲",
+    "TC": "mmol/L"
+  },
+  "descr": {
+    "Mean_nwi_Total": "全段平均管壁指数 (Mean NWI)",
+    "Residual_stenosis_rate": "残余狭窄率",
+    "Mean_lumen_area(mm²)_Total": "全段平均管腔面积",
+    "wavelet-HLL_glcm_Correlation": "影像组学纹理特征 (wavelet-HLL GLCM 相关性)",
+    "original_shape_Flatness": "影像组学形状特征 (扁平度)",
+    "Max_nwi_Total": "全段最大管壁指数 (Max NWI)",
+    "TC": "总胆固醇 (Total Cholesterol)"
+  },
+  "stats": {
+    "Mean_nwi_Total": {
+      "min": 0.5541,
+      "max": 0.9813,
+      "median": 0.7953,
+      "mean": 0.7948008438818565
+    },
+    "Residual_stenosis_rate": {
+      "min": 0.018518519,
+      "max": 0.675,
+      "median": 0.354166667,
+      "mean": 0.34312847256118145
+    },
+    "Mean_lumen_area(mm²)_Total": {
+      "min": 0.12,
+      "max": 7.7381,
+      "median": 1.7936,
+      "mean": 2.0346021097046414
+    },
+    "wavelet-HLL_glcm_Correlation": {
+      "min": 0.0520367577590429,
+      "max": 0.557318142239056,
+      "median": 0.297216611026862,
+      "mean": 0.29885488387377956
+    },
+    "original_shape_Flatness": {
+      "min": 0.073810372525821,
+      "max": 0.914300188906354,
+      "median": 0.284241511752486,
+      "mean": 0.380555651792146
+    },
+    "Max_nwi_Total": {
+      "min": 0.6487,
+      "max": 1.0,
+      "median": 0.9374,
+      "mean": 0.9216168776371308
+    },
+    "TC": {
+      "min": 1.69,
+      "max": 7.36,
+      "median": 3.41,
+      "mean": 3.5179324894514767
+    }
+  },
+  "meta": {
+    "model_type": "ExtraTreesClassifier",
+    "n_estimators": 100,
+    "max_depth": 4,
+    "random_state": 42,
+    "trained_on": "Full internal derivation cohort (n=237, ISR=38)",
+    "internal_oof_auc": 0.823,
+    "youden_threshold": 0.17347506941257798,
+    "base_probability": 0.16033755274261588,
+    "feature_count": 7
+  }
+}
