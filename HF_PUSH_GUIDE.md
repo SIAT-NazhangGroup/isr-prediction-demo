@@ -13,16 +13,24 @@
 
 ---
 
-## 方式一（推荐，最简单）：HF 网页从 GitHub 一键导入
+## 方式一（推荐）：用 GitHub Actions 自动同步到 HF Space
 
-1. 浏览器打开 https://huggingface.co 并登录（用的组织账号 SIAT-NazhangGroup）。
-2. 右上角 **New** → **Space**。
-3. 选择 **Streamlit** 作为 SDK，命名 `isr-prediction-demo`，设为 **Public**。
-4. 创建后在 Space 的 **Settings** 页面找到 "**Link a GitHub repository**"，
-   选择 `SIAT-NazhangGroup/isr-prediction-demo`（已发布好的仓库），按提示绑定并同步。
-   - 部分版本在创建页即可直接选 "Import from GitHub repository"，效果相同。
-5. 绑定后 HF 会按仓库根目录 `README.md` 的 frontmatter 自动 `streamlit run app.py` 构建，
-   几分钟后给出公开 URL，可直接写进论文作交互式补充材料。
+> 本仓库已内置工作流 `.github/workflows/sync-to-hub.yml`（官方
+> `huggingface/hub-sync` Action）。它在每次 push 到 `main` 时，由 **GitHub 的
+> runner（美国，不受本机/本环境网络限制）** 自动把内容镜像为一个 Hugging Face
+> Space——**首次运行会自动创建 Space，无需在 HF 网页手动建立**。
+
+你只需做两件事：
+
+1. 打开 https://github.com/SIAT-NazhangGroup/isr-prediction-demo ，
+   进入 **Settings → Secrets and variables → Actions → New repository secret**。
+2. Name 填 `HF_TOKEN`，Value 填你的 Hugging Face 访问令牌（即 `hf_...` 那个），保存。
+3. 进入仓库 **Actions** 标签，找到 "Sync to Hugging Face Hub" 工作流，点
+   **Run workflow**（之后每次 push 会自动触发）。
+
+几分钟后 HF Space 自动创建于
+`https://huggingface.co/spaces/SIAT-NazhangGroup/isr-prediction-demo`，
+并按根目录 `README.md` 的 frontmatter 用 Streamlit 运行 `app.py` 构建在线 demo。
 
 ---
 
