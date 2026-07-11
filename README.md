@@ -1,19 +1,35 @@
----
-title: ISR Prediction Demo
-emoji: 🧠
-colorFrom: blue
-colorTo: red
-sdk: streamlit
-sdk_version: "1.30"
-app_file: app.py
-pinned: false
----
-
 # ISR 风险预测器 · 开源在线演示版
 
 > 颅内支架植入术后再狭窄（ISR）可解释性预测模型的在线交互版本，作为论文《基于多模态特征与全组合优化框架的颅内支架植入术后再狭窄可解释性预测模型的建立与验证》的配套开源组件。
 
 本仓库提供一个 **Streamlit** 网页应用：输入 7 个临床/影像特征，即可得到 ISR 的**预测概率**、**高/低风险判定**，以及**逐例 SHAP 解释**（与论文图 11–12 一致的力图样式）。模型与论文最终部署模型**完全一致**（同一训练数据、同一超参数、固定随机种子）。
+
+---
+
+## 部署方式
+
+### 方式一（推荐，免费）：Streamlit Community Cloud
+Streamlit Community Cloud 是 Streamlit 官方免费托管平台，与本仓库一键集成，不受 Hugging Face 近期收费政策影响：
+
+1. 打开 https://streamlit.io/cloud ，使用 **GitHub 登录**并授权 `SIAT-NazhangGroup` 组织。
+2. 点击 **New app**（或 *Deploy an app*）。
+3. 配置：
+   - Repository：`SIAT-NazhangGroup/isr-prediction-demo`
+   - Branch：`main`
+   - Main file path：`app.py`
+4. 点击 **Deploy**，等待 2–5 分钟（首次需安装 shap / scikit-learn 等依赖）。
+5. 部署完成获得公开链接：`https://<app-name>.streamlit.app`。
+
+> 仓库已包含 `runtime.txt`（锁定 Python 3.11）与 `requirements.txt`，确保依赖一致。之后每次 `git push` 到 `main` 分支，Community Cloud 会自动重新部署。
+
+### 方式二（付费，留在 Hugging Face Spaces）：HF PRO + Docker
+> 说明：HF 于 2025-04-30 弃用 Streamlit 内置 SDK；截至 2026-07-11，免费档仅支持 **Static**，运行 Python demo（Gradio / Docker）需订阅 **HF PRO（$9/月）**。
+
+若仍需以 HF 链接作为引用：
+1. 订阅 HF PRO。
+2. 新建 Space：SDK 选 **Docker** → 使用 **Streamlit 模板** → Public。
+3. 推送本仓库文件（已含 `Dockerfile`）；并将本文件顶部元数据改为 `sdk: docker` 并指定 `app_port: 8501`（Streamlit 默认监听 8501，而非 HF Docker 默认的 7860）。
+4. 即可在 `https://huggingface.co/spaces/SIAT-NazhangGroup/isr-prediction-demo` 构建运行。
 
 ---
 
@@ -58,15 +74,6 @@ streamlit run app.py
 
 ---
 
-## 部署到 Hugging Face Spaces（推荐）
-
-1. 在 Hugging Face 新建一个 **Space**，SDK 选择 **Streamlit**。
-2. 将本仓库全部文件（含 `model/pipeline.joblib`）上传或 `git push` 到该 Space。
-3. 等待构建完成，即可获得公开可访问的在线 demo 链接。
-4. 论文中可引用该链接作为可交互补充材料。
-
----
-
 ## 逐例 SHAP 解释
 
 每次预测都会用 `shap.TreeExplainer` 计算该患者的特征贡献，并渲染力图为：从基准值 `E[f(x)] = 0.160` 出发，各特征段按其取值（蓝→红）将预测概率推移到模型输出 `f(x)`。红色段=特征值偏高，蓝色段=偏低。该可视化与论文图 11/12 风格一致，体现模型的可解释性。
@@ -93,6 +100,8 @@ ISR_online/
 ├── app.py                 # Streamlit 主程序
 ├── export_pipeline.py     # 模型导出脚本（生成 model/pipeline.joblib）
 ├── requirements.txt       # Python 依赖
+├── runtime.txt            # 锁定 Python 3.11（Streamlit Community Cloud）
+├── Dockerfile             # HF PRO + Docker 部署备选
 ├── test_headless.py       # 无头逻辑测试（开发者用）
 ├── model/
 │   ├── pipeline.joblib     # 序列化的 StandardScaler + ET + 阈值 + 基准值 + 特征元数据
