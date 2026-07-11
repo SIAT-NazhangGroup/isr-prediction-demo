@@ -13,12 +13,40 @@ jobs:
         with:
           lfs: true
           fetch-depth: 0
-      - name: Sync to HF Hub
-        uses: huggingface/hub-sync@v0.2.0
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: SIAT-NazhangGroup/isr-prediction-demo
-          hf_token: ${{ secrets.HF_TOKEN }}
-          repo_type: space
-          space_sdk: streamlit
-          private: false
+          python-version: '3.11'
+      - name: Install huggingface_hub
+        run: pip install -U "huggingface_hub"
+      - name: Upload to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+
+          REPO = "SIAT-NazhangGroup/isr-prediction-demo"
+          api = HfApi(token=os.environ["HF_TOKEN"])
+
+          # The Space was created on huggingface.co (SDK=streamlit).
+          # exist_ok=True reuses it without re-specifying the SDK, which
+          # avoids the hf-CLI "space-sdk must be gradio|docker|static" regression.
+          api.create_repo(repo_id=REPO, repo_type="space", exist_ok=True)
+
+          api.upload_folder(
+              repo_id=REPO,
+              repo_type="space",
+              folder_path=".",
+              ignore_patterns=[
+                  "**/.git*",
+                  "**/.github*",
+                  "**/__pycache__",
+                  "**/*.pyc",
+                  "HF_PUSH_GUIDE.md",
+                  "test_headless.py",
+              ],
+          )
+          print("Synced to https://huggingface.co/spaces/" + REPO)
+          PY
