@@ -8,7 +8,8 @@ Loads model/pipeline.joblib (exported by export_pipeline.py) and provides:
   - per-instance SHAP explanation (force plot, native style, matches the paper)
   - data dictionary + research-use disclaimer
 
-Deploy: push this folder to a Hugging Face Space (Streamlit SDK).
+Deploy: push this folder to GitHub and deploy via Streamlit Community Cloud
+(main file: app.py). Free, no HF PRO required.
 """
 import os
 import numpy as np
@@ -21,6 +22,50 @@ import matplotlib.pyplot as plt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PIPE_PATH = os.path.join(HERE, "model", "pipeline.joblib")
+
+# ---------------------------------------------------------------------------
+# Custom UI styling (light theme, clean clinical look)
+# ---------------------------------------------------------------------------
+CSS = """
+<style>
+.hero {
+    background: linear-gradient(135deg, #1f6feb 0%, #0b3d91 100%);
+    color: #ffffff;
+    border-radius: 16px;
+    padding: 1.4rem 1.6rem;
+    box-shadow: 0 6px 18px rgba(11, 61, 145, .18);
+    margin-bottom: .4rem;
+}
+.hero-title { font-size: 1.5rem; font-weight: 800; letter-spacing: .5px; }
+.hero-sub  { font-size: .9rem; opacity: .92; margin-top: .45rem; }
+.section-title {
+    font-size: 1.1rem; font-weight: 700; color: #0b3d91;
+    margin: 1.3rem 0 .7rem; padding-left: .55rem;
+    border-left: 4px solid #1f6feb;
+}
+.verdict-high {
+    display: inline-block; background: #fdecea; color: #c0392b;
+    border: 1px solid #f5c6c0; border-radius: 999px;
+    padding: .4rem 1.1rem; font-weight: 700; font-size: 1.05rem;
+}
+.verdict-low {
+    display: inline-block; background: #eafaf1; color: #1e8449;
+    border: 1px solid #bfe6cd; border-radius: 999px;
+    padding: .4rem 1.1rem; font-weight: 700; font-size: 1.05rem;
+}
+.pbar-wrap {
+    position: relative; height: 28px; background: #eceff3;
+    border-radius: 999px; overflow: hidden;
+}
+.pbar-fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #f1c40f 0%, #e67e22 55%, #e74c3c 100%);
+    transition: width .45s ease;
+}
+.pbar-thresh { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #2c3e50; }
+.hint { font-size: .82rem; color: #6b7280; }
+</style>
+"""
 
 
 def load_pipeline(path=PIPE_PATH):
@@ -80,74 +125,127 @@ def shap_table(pipeline, res):
 def run_app():
     import streamlit as st
     st.set_page_config(page_title="ISR 风险预测器", page_icon="🩺", layout="wide")
+    st.markdown(CSS, unsafe_allow_html=True)
+
     pipeline = load_pipeline()
     feats = pipeline["features"]
     disp = pipeline["display"]
     units = pipeline["units"]
     descr = pipeline["descr"]
     stats = pipeline["stats"]
-    meta = pipeline["meta"]
 
-    st.title("🩺 颅内支架植入术后再狭窄（ISR）风险预测器")
-    st.caption("基于多模态特征与全组合优化框架的可解释预测模型 · 开源在线演示版")
+    # ---- session state: keep last *submitted* prediction ----
+    if "result" not in st.session_state:
+        init = {f: float(stats[f]["median"]) for f in feats}
+        st.session_state.result = predict(pipeline, init)
+        st.session_state.shap_fig = shap_force_figure(pipeline, st.session_state.result)
+        st.session_state.shap_df = shap_table(pipeline, st.session_state.result)
+        st.session_state.submitted = dict(init)
 
+    # ---- hero header ----
+    st.markdown(
+        '<div class="hero">'
+        '<div class="hero-title">🩺 颅内支架植入术后再狭窄（ISR）风险预测器</div>'
+        '<div class="hero-sub">基于多模态特征与全组合优化框架的可解释预测模型 · 开源在线演示版</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.markdown(
         "输入以下 **7 个特征**（与论文最终模型一致），获得该患者发生 ISR 的**预测概率**及"
         "**逐例 SHAP 解释**。模型在内部推导队列（n=237）上训练，交叉验证 AUC = **0.823**。"
+        "修改输入后，请点击 **🔄 更新预测结果** 刷新。"
     )
 
-    # ---- inputs ----
-    st.subheader("① 输入特征")
+    # ---- ① inputs ----
+    st.markdown('<div class="section-title">① 输入特征</div>', unsafe_allow_html=True)
     cols = st.columns(2)
-    values = {}
     for i, f in enumerate(feats):
         s = stats[f]
         with cols[i % 2]:
             step = 0.1 if f == "TC" else 0.001
-            val = st.number_input(
+            st.number_input(
                 label=f"**{disp[f]}**  ({descr[f]})",
                 min_value=float(s["min"]), max_value=float(s["max"]),
                 value=float(s["median"]), step=step, format="%.4f",
+                key=f"in_{f}",
                 help=f"单位：{units[f]}；训练集范围 {s['min']:.3f}–{s['max']:.3f}",
             )
-            values[f] = val
 
-    # ---- predict ----
-    res = predict(pipeline, values)
-    st.subheader("② 预测结果")
+    # ---- action buttons ----
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        update = st.button("🔄 更新预测结果", type="primary", use_container_width=True)
+    with b2:
+        reset = st.button("↩ 重置为中位数", use_container_width=True)
 
+    if reset:
+        vals = {f: float(stats[f]["median"]) for f in feats}
+        for f in feats:
+            st.session_state[f"in_{f}"] = vals[f]
+        res = predict(pipeline, vals)
+        st.session_state.result = res
+        st.session_state.shap_fig = shap_force_figure(pipeline, res)
+        st.session_state.shap_df = shap_table(pipeline, res)
+        st.session_state.submitted = dict(vals)
+        st.rerun()
+
+    if update:
+        values = {f: float(st.session_state[f"in_{f}"]) for f in feats}
+        res = predict(pipeline, values)
+        st.session_state.result = res
+        st.session_state.shap_fig = shap_force_figure(pipeline, res)
+        st.session_state.shap_df = shap_table(pipeline, res)
+        st.session_state.submitted = dict(values)
+        st.toast("✅ 预测结果已更新", icon="✅")
+
+    res = st.session_state.result
+
+    # stale-input hint
+    current = {f: float(st.session_state[f"in_{f}"]) for f in feats}
+    if current != st.session_state.submitted:
+        st.info("⚠️ 输入已修改，点击「🔄 更新预测结果」以刷新预测。")
+
+    # ---- ② results ----
+    st.markdown('<div class="section-title">② 预测结果</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([1, 2])
     with c1:
         pct = res["prob"] * 100
         st.metric("ISR 预测概率", f"{pct:.1f}%",
                   delta=f"Youden 阈值 {res['threshold']:.3f}")
-        verdict = "⚠️ 高 ISR 风险" if res["isr"] else "✅ 低 ISR 风险"
-        st.markdown(f"### {verdict}")
+        if res["isr"]:
+            st.markdown('<span class="verdict-high">⚠️ 高 ISR 风险</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="verdict-low">✅ 低 ISR 风险</span>', unsafe_allow_html=True)
     with c2:
-        # simple horizontal bar
-        fig, ax = plt.subplots(figsize=(5, 0.6))
-        ax.barh(0, res["prob"], color="#D55E00", height=0.5)
-        ax.barh(0, 1 - res["prob"], left=res["prob"], color="#E5E5E5", height=0.5)
-        ax.axvline(res["threshold"], color="#0072B2", lw=1.5, ls="--")
-        ax.text(res["threshold"], 0.45, f"阈值 {res['threshold']:.3f}",
-                color="#0072B2", fontsize=8, ha="center", va="bottom")
-        ax.set_xlim(0, 1); ax.set_yticks([]); ax.set_xlabel("ISR probability")
-        ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_visible(False)
-        st.pyplot(fig, use_container_width=True)
+        # CSS probability bar with Youden-threshold marker (replaces the old matplotlib prob_bar)
+        thr = res["threshold"] * 100
+        bar_html = f"""
+        <div style="margin-top:16px;">
+          <div class="pbar-wrap">
+            <div class="pbar-fill" style="width:{pct:.1f}%"></div>
+            <div class="pbar-thresh" style="left:{thr:.1f}%"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between;
+                      font-size:.75rem; color:#6b7280; margin-top:5px;">
+            <span>0%</span>
+            <span style="color:#2c3e50; font-weight:600;">Youden 阈值 {res['threshold']:.3f}</span>
+            <span>100%</span>
+          </div>
+        </div>
+        """
+        st.markdown(bar_html, unsafe_allow_html=True)
 
-    # ---- SHAP ----
-    st.subheader("③ 逐例 SHAP 解释")
+    # ---- ③ SHAP ----
+    st.markdown('<div class="section-title">③ 逐例 SHAP 解释</div>', unsafe_allow_html=True)
     st.markdown(
         f"下图展示每个特征如何将预测概率从基准值 **E[f(x)] = {res['expected_value']:.3f}** "
         f"推移到模型输出 **f(x) = {res['prob']:.3f}**。红色段=特征值偏高，蓝色段=偏低；"
         f"各段按特征值大小着色。"
     )
-    fig = shap_force_figure(pipeline, res)
-    st.pyplot(fig, use_container_width=True)
+    st.pyplot(st.session_state.shap_fig, use_container_width=True)
 
     with st.expander("查看特征贡献明细"):
-        st.dataframe(shap_table(pipeline, res), use_container_width=True)
+        st.dataframe(st.session_state.shap_df, use_container_width=True)
 
     # ---- data dictionary ----
     with st.expander("📋 数据字典（7 个特征说明）"):
