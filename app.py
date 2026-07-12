@@ -133,23 +133,30 @@ def run_app():
     units = pipeline["units"]
     descr = pipeline["descr"]
     stats = pipeline["stats"]
+    medians = {f: float(stats[f]["median"]) for f in feats}
 
-    # ---- initialize input widget state ONCE (before widgets are created) ----
-    # NOTE: number_input widgets below use `key=` ONLY (no `value=` argument).
-    # Passing both `value=` and `key=` makes recent Streamlit versions fight over
-    # the source of truth, so user edits may not reach session_state and the
-    # update callback reads stale values -> prediction/SHAP never refresh.
-    for f in feats:
-        if f"in_{f}" not in st.session_state:
-            st.session_state[f"in_{f}"] = float(stats[f]["median"])
-
-    # ---- session state: keep last *submitted* prediction ----
+    # ---- session state ----
     if "result" not in st.session_state:
-        init = {f: float(stats[f]["median"]) for f in feats}
-        st.session_state.result = predict(pipeline, init)
+        st.session_state.result = predict(pipeline, medians)
         st.session_state.shap_fig = shap_force_figure(pipeline, st.session_state.result)
         st.session_state.shap_df = shap_table(pipeline, st.session_state.result)
-        st.session_state.submitted = dict(init)
+    if "submitted" not in st.session_state:
+        st.session_state.submitted = dict(medians)
+
+    # ---- apply a pending RESET *before* widgets are instantiated ----
+    # In Streamlit >= 1.37 a widget's session_state key cannot be modified after
+    # the widget is created (neither in a callback nor in the body). So the reset
+    # button only flips this flag; the actual reset happens here, at the very top
+    # of the next script run, before the number_inputs exist.
+    if st.session_state.get("_reset_pending"):
+        for f in feats:
+            st.session_state[f"in_{f}"] = medians[f]
+        res = predict(pipeline, medians)
+        st.session_state.result = res
+        st.session_state.shap_fig = shap_force_figure(pipeline, res)
+        st.session_state.shap_df = shap_table(pipeline, res)
+        st.session_state.submitted = dict(medians)
+        st.session_state._reset_pending = False
 
     # ---- hero header ----
     st.markdown(
@@ -165,8 +172,12 @@ def run_app():
         "修改输入后，请点击 **🔄 更新预测结果** 刷新。"
     )
 
-    # ---- ① inputs ----
+    # ---- ① inputs (key-only widgets so edits land in session_state) ----
     st.markdown('<div class="section-title">① 输入特征</div>', unsafe_allow_html=True)
+    # initialize widget keys once (only first render)
+    for f in feats:
+        if f"in_{f}" not in st.session_state:
+            st.session_state[f"in_{f}"] = medians[f]
     cols = st.columns(2)
     for i, f in enumerate(feats):
         s = stats[f]
@@ -176,41 +187,35 @@ def run_app():
                 label=f"**{disp[f]}**  ({descr[f]})",
                 min_value=float(s["min"]), max_value=float(s["max"]),
                 step=step, format="%.4f",
-                key=f"in_{f}",  # value comes from session_state (initialized above)
+                key=f"in_{f}",
                 help=f"单位：{units[f]}；训练集范围 {s['min']:.3f}–{s['max']:.3f}",
             )
 
-    # ---- action callbacks (set widget session_state BEFORE re-render) ----
-    def do_update():
-        values = {f: float(st.session_state[f"in_{f}"]) for f in feats}
-        res = predict(pipeline, values)
-        st.session_state.result = res
-        st.session_state.shap_fig = shap_force_figure(pipeline, res)
-        st.session_state.shap_df = shap_table(pipeline, res)
-        st.session_state.submitted = dict(values)
-        st.toast("✅ 预测结果已更新", icon="✅")
+    # ---- action buttons (plain buttons; compute in the MAIN script body) ----
+    # NOTE: we deliberately avoid on_click callbacks that write widget keys,
+    # because recent Streamlit ignores widget-key writes inside callbacks.
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        update_clicked = st.button("🔄 更新预测结果", type="primary", width='stretch')
+    with b2:
+        reset_clicked = st.button("↩ 重置为中位数", width='stretch')
 
-    def do_reset():
-        vals = {f: float(stats[f]["median"]) for f in feats}
-        for f in feats:
-            st.session_state[f"in_{f}"] = vals[f]
+    if update_clicked:
+        vals = {f: float(st.session_state[f"in_{f}"]) for f in feats}
         res = predict(pipeline, vals)
         st.session_state.result = res
         st.session_state.shap_fig = shap_force_figure(pipeline, res)
         st.session_state.shap_df = shap_table(pipeline, res)
         st.session_state.submitted = dict(vals)
+        st.toast("✅ 预测结果已更新", icon="✅")
 
-    # ---- action buttons ----
-    b1, b2 = st.columns([1, 1])
-    with b1:
-        st.button("🔄 更新预测结果", type="primary", use_container_width=True,
-                  on_click=do_update)
-    with b2:
-        st.button("↩ 重置为中位数", use_container_width=True, on_click=do_reset)
+    if reset_clicked:
+        # flip the flag; the actual reset runs at the top of the next script run
+        st.session_state._reset_pending = True
 
     res = st.session_state.result
 
-    # stale-input hint
+    # stale-input hint (edits are live in session_state, so this is accurate)
     current = {f: float(st.session_state[f"in_{f}"]) for f in feats}
     if current != st.session_state.submitted:
         st.info("⚠️ 输入已修改，点击「🔄 更新预测结果」以刷新预测。")
@@ -255,7 +260,7 @@ def run_app():
     st.pyplot(st.session_state.shap_fig, use_container_width=True)
 
     with st.expander("查看特征贡献明细"):
-        st.dataframe(st.session_state.shap_df, use_container_width=True)
+        st.dataframe(st.session_state.shap_df, width='stretch')
 
     # ---- data dictionary ----
     with st.expander("📋 数据字典（7 个特征说明）"):
@@ -265,7 +270,7 @@ def run_app():
                  训练集范围=f"{stats[f]['min']:.3f}–{stats[f]['max']:.3f}")
             for f in feats
         ])
-        st.dataframe(dd, use_container_width=True)
+        st.dataframe(dd, width='stretch')
 
     # ---- disclaimer ----
     st.divider()
