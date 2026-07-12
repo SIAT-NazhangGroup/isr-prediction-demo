@@ -171,14 +171,17 @@ def run_app():
                 help=f"单位：{units[f]}；训练集范围 {s['min']:.3f}–{s['max']:.3f}",
             )
 
-    # ---- action buttons ----
-    b1, b2 = st.columns([1, 1])
-    with b1:
-        update = st.button("🔄 更新预测结果", type="primary", use_container_width=True)
-    with b2:
-        reset = st.button("↩ 重置为中位数", use_container_width=True)
+    # ---- action callbacks (set widget session_state BEFORE re-render) ----
+    def do_update():
+        values = {f: float(st.session_state[f"in_{f}"]) for f in feats}
+        res = predict(pipeline, values)
+        st.session_state.result = res
+        st.session_state.shap_fig = shap_force_figure(pipeline, res)
+        st.session_state.shap_df = shap_table(pipeline, res)
+        st.session_state.submitted = dict(values)
+        st.toast("✅ 预测结果已更新", icon="✅")
 
-    if reset:
+    def do_reset():
         vals = {f: float(stats[f]["median"]) for f in feats}
         for f in feats:
             st.session_state[f"in_{f}"] = vals[f]
@@ -187,16 +190,14 @@ def run_app():
         st.session_state.shap_fig = shap_force_figure(pipeline, res)
         st.session_state.shap_df = shap_table(pipeline, res)
         st.session_state.submitted = dict(vals)
-        st.rerun()
 
-    if update:
-        values = {f: float(st.session_state[f"in_{f}"]) for f in feats}
-        res = predict(pipeline, values)
-        st.session_state.result = res
-        st.session_state.shap_fig = shap_force_figure(pipeline, res)
-        st.session_state.shap_df = shap_table(pipeline, res)
-        st.session_state.submitted = dict(values)
-        st.toast("✅ 预测结果已更新", icon="✅")
+    # ---- action buttons ----
+    b1, b2 = st.columns([1, 1])
+    with b1:
+        st.button("🔄 更新预测结果", type="primary", use_container_width=True,
+                  on_click=do_update)
+    with b2:
+        st.button("↩ 重置为中位数", use_container_width=True, on_click=do_reset)
 
     res = st.session_state.result
 
