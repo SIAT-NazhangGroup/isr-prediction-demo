@@ -134,6 +134,15 @@ def run_app():
     descr = pipeline["descr"]
     stats = pipeline["stats"]
 
+    # ---- initialize input widget state ONCE (before widgets are created) ----
+    # NOTE: number_input widgets below use `key=` ONLY (no `value=` argument).
+    # Passing both `value=` and `key=` makes recent Streamlit versions fight over
+    # the source of truth, so user edits may not reach session_state and the
+    # update callback reads stale values -> prediction/SHAP never refresh.
+    for f in feats:
+        if f"in_{f}" not in st.session_state:
+            st.session_state[f"in_{f}"] = float(stats[f]["median"])
+
     # ---- session state: keep last *submitted* prediction ----
     if "result" not in st.session_state:
         init = {f: float(stats[f]["median"]) for f in feats}
@@ -166,8 +175,8 @@ def run_app():
             st.number_input(
                 label=f"**{disp[f]}**  ({descr[f]})",
                 min_value=float(s["min"]), max_value=float(s["max"]),
-                value=float(s["median"]), step=step, format="%.4f",
-                key=f"in_{f}",
+                step=step, format="%.4f",
+                key=f"in_{f}",  # value comes from session_state (initialized above)
                 help=f"单位：{units[f]}；训练集范围 {s['min']:.3f}–{s['max']:.3f}",
             )
 
