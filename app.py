@@ -155,8 +155,8 @@ def run_app():
         "original_shape_Flatness": "dimensionless",
         "TC": "mmol/L",
     }
-    pipeline["descr"] = {f: EN_DESCR.get(f, pipeline["descr"][f]) for f in feats}
-    pipeline["units"] = {f: EN_UNITS.get(f, pipeline["units"][f]) for f in feats}
+    descr = {f: EN_DESCR.get(f, pipeline["descr"][f]) for f in feats}
+    units = {f: EN_UNITS.get(f, pipeline["units"][f]) for f in feats}
 
     # ---- session state ----
     if "result" not in st.session_state:
