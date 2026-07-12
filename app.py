@@ -124,7 +124,7 @@ def shap_table(pipeline, res):
 
 def run_app():
     import streamlit as st
-    st.set_page_config(page_title="ISR 风险预测器", page_icon="🩺", layout="wide")
+    st.set_page_config(page_title="ISR Risk Predictor", page_icon="🩺", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
 
     pipeline = load_pipeline()
@@ -134,6 +134,29 @@ def run_app():
     descr = pipeline["descr"]
     stats = pipeline["stats"]
     medians = {f: float(stats[f]["median"]) for f in feats}
+
+    # ---- English UI labels (override the model's Chinese metadata in-memory;
+    #      the joblib file is NOT modified, model params stay identical) ----
+    EN_DESCR = {
+        "Mean_nwi_Total": "Mean normalized wall index (Mean NWI)",
+        "Max_nwi_Total": "Max normalized wall index (Max NWI)",
+        "Residual_stenosis_rate": "Residual stenosis rate",
+        "Mean_lumen_area(mm²)_Total": "Mean lumen area",
+        "wavelet-HLL_glcm_Correlation": "Radiomic texture: wavelet-HLL GLCM correlation",
+        "original_shape_Flatness": "Radiomic shape: flatness",
+        "TC": "Total cholesterol",
+    }
+    EN_UNITS = {
+        "Mean_nwi_Total": "dimensionless",
+        "Max_nwi_Total": "dimensionless",
+        "Residual_stenosis_rate": "proportion (0–1)",
+        "Mean_lumen_area(mm²)_Total": "mm²",
+        "wavelet-HLL_glcm_Correlation": "dimensionless",
+        "original_shape_Flatness": "dimensionless",
+        "TC": "mmol/L",
+    }
+    pipeline["descr"] = {f: EN_DESCR.get(f, pipeline["descr"][f]) for f in feats}
+    pipeline["units"] = {f: EN_UNITS.get(f, pipeline["units"][f]) for f in feats}
 
     # ---- session state ----
     if "result" not in st.session_state:
@@ -161,24 +184,28 @@ def run_app():
     # ---- hero header ----
     st.markdown(
         '<div class="hero">'
-        '<div class="hero-title">🩺 颅内支架植入术后再狭窄（ISR）风险预测器</div>'
-        '<div class="hero-sub">基于多模态特征与全组合优化框架的可解释预测模型 · 开源在线演示版</div>'
+        '<div class="hero-title">🩺 ISR Risk Predictor</div>'
+        '<div class="hero-sub">Explainable prediction model for in-stent restenosis after '
+        'intracranial stenting &middot; open-source online demo</div>'
         '</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
-        "输入以下 **7 个特征**（与论文最终模型一致），获得该患者发生 ISR 的**预测概率**及"
-        "**逐例 SHAP 解释**。模型在内部推导队列（n=237）上训练，交叉验证 AUC = **0.823**。"
-        "修改输入后，请点击 **🔄 更新预测结果** 刷新。"
+        "Enter the following **7 features** (identical to the final model in the paper) to obtain "
+        "the **predicted probability** of in-stent restenosis (ISR) and a **per-instance SHAP "
+        "explanation**. The model was trained on the internal derivation cohort (n=237) with a "
+        "cross-validated AUC of **0.823**. After editing the inputs, click **🔄 Update prediction** "
+        "to refresh."
     )
 
     # ---- ① inputs (inside a FORM so typed values are committed on submit) ----
-    st.markdown('<div class="section-title">① 输入特征</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">① Input features</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="hint">可直接键入数值或用 +/- 微调；改完后点表单底部的'
-        ' <b>🔄 更新预测结果</b>（表单内所有修改会在此刻一次性提交）。'
-        '输入框上下限按各特征的<b>实际可能取值范围</b>设定；若取值超出训练集范围，'
-        '结果区会给出「外推预警」，提示预测为外推、请谨慎解读。</div>',
+        '<div class="hint">Type a value directly or use the +/- stepper; then click '
+        ' <b>🔄 Update prediction</b> at the bottom of the form (all changes are committed at once). '
+        'Each input is bounded by the <b>physically / clinically possible range</b> of the feature. '
+        'Values outside the training-set range trigger an <b>extrapolation warning</b> in the results '
+        'section &mdash; interpret such predictions with caution.</div>',
         unsafe_allow_html=True,
     )
     # initialize widget keys once (only first render)
@@ -211,14 +238,14 @@ def run_app():
                     min_value=float(lo), max_value=float(hi),
                     step=step, format="%.4f",
                     key=f"in_{f}",
-                    help=f"单位：{units[f]}；允许范围 {lo:.3f}–{hi:.3f}；"
-                         f"训练集范围 {s['min']:.3f}–{s['max']:.3f}",
+                    help=f"Unit: {units[f]}; allowed range {lo:.3f}–{hi:.3f}; "
+                         f"training-set range {s['min']:.3f}–{s['max']:.3f}",
                 )
         update_clicked = st.form_submit_button(
-            "🔄 更新预测结果", type="primary", width='stretch')
+            "🔄 Update prediction", type="primary", width='stretch')
 
     # ---- reset button (OUTSIDE the form; plain buttons aren't allowed in forms) ----
-    reset_clicked = st.button("↩ 重置为中位数", width='stretch')
+    reset_clicked = st.button("↩ Reset to medians", width='stretch')
 
     if update_clicked:
         # Inside a form, ALL widget edits (typed or +/-) are committed to
@@ -229,7 +256,7 @@ def run_app():
         st.session_state.shap_fig = shap_force_figure(pipeline, res)
         st.session_state.shap_df = shap_table(pipeline, res)
         st.session_state.submitted = dict(vals)
-        st.toast("✅ 预测结果已更新", icon="✅")
+        st.toast("✅ Prediction updated", icon="✅")
 
     if reset_clicked:
         # flip the flag; the actual reset runs at the top of the next script run
@@ -244,21 +271,22 @@ def run_app():
            or st.session_state.submitted[f] > stats[f]["max"]]
     if oor:
         st.warning(
-            "⚠️ 以下特征的当前取值**超出训练集范围**，预测属于外推，结果请谨慎解读："
-            + "、".join(oor)
+            "⚠️ The current value of the following feature(s) is **outside the training-set "
+            "range**; the prediction is an extrapolation and should be interpreted with caution: "
+            + ", ".join(oor)
         )
 
     # ---- ② results ----
-    st.markdown('<div class="section-title">② 预测结果</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">② Prediction result</div>', unsafe_allow_html=True)
     c1, c2 = st.columns([1, 2])
     with c1:
         pct = res["prob"] * 100
-        st.metric("ISR 预测概率", f"{pct:.1f}%",
-                  delta=f"Youden 阈值 {res['threshold']:.3f}")
+        st.metric("Predicted ISR probability", f"{pct:.1f}%",
+                  delta=f"Youden cutoff {res['threshold']:.3f}")
         if res["isr"]:
-            st.markdown('<span class="verdict-high">⚠️ 高 ISR 风险</span>', unsafe_allow_html=True)
+            st.markdown('<span class="verdict-high">⚠️ High ISR risk</span>', unsafe_allow_html=True)
         else:
-            st.markdown('<span class="verdict-low">✅ 低 ISR 风险</span>', unsafe_allow_html=True)
+            st.markdown('<span class="verdict-low">✅ Low ISR risk</span>', unsafe_allow_html=True)
     with c2:
         # CSS probability bar with Youden-threshold marker (replaces the old matplotlib prob_bar)
         thr = res["threshold"] * 100
@@ -271,7 +299,7 @@ def run_app():
           <div style="display:flex; justify-content:space-between;
                       font-size:.75rem; color:#6b7280; margin-top:5px;">
             <span>0%</span>
-            <span style="color:#2c3e50; font-weight:600;">Youden 阈值 {res['threshold']:.3f}</span>
+            <span style="color:#2c3e50; font-weight:600;">Youden cutoff {res['threshold']:.3f}</span>
             <span>100%</span>
           </div>
         </div>
@@ -279,23 +307,24 @@ def run_app():
         st.markdown(bar_html, unsafe_allow_html=True)
 
     # ---- ③ SHAP ----
-    st.markdown('<div class="section-title">③ 逐例 SHAP 解释</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">③ Per-instance SHAP explanation</div>', unsafe_allow_html=True)
     st.markdown(
-        f"下图展示每个特征如何将预测概率从基准值 **E[f(x)] = {res['expected_value']:.3f}** "
-        f"推移到模型输出 **f(x) = {res['prob']:.3f}**。红色段=特征值偏高，蓝色段=偏低；"
-        f"各段按特征值大小着色。"
+        f"The figure below shows how each feature pushes the predicted probability from the baseline "
+        f"**E[f(x)] = {res['expected_value']:.3f}** to the model output **f(x) = {res['prob']:.3f}**. "
+        f"Red segments indicate a high feature value, blue segments a low value; each segment is "
+        f"colored by the feature's value."
     )
     st.pyplot(st.session_state.shap_fig, width='stretch')
 
-    with st.expander("查看特征贡献明细"):
+    with st.expander("Feature contribution details"):
         st.dataframe(st.session_state.shap_df, width='stretch')
 
     # ---- data dictionary ----
-    with st.expander("📋 数据字典（7 个特征说明）"):
+    with st.expander("📋 Data dictionary (7 features)"):
         dd = pd.DataFrame([
-            dict(特征=disp[f], 含义=descr[f], 单位=units[f],
-                 训练集中位数=f"{stats[f]['median']:.3f}",
-                 训练集范围=f"{stats[f]['min']:.3f}–{stats[f]['max']:.3f}")
+            dict(Feature=disp[f], Description=descr[f], Unit=units[f],
+                 Median=f"{stats[f]['median']:.3f}",
+                 Range=f"{stats[f]['min']:.3f}–{stats[f]['max']:.3f}")
             for f in feats
         ])
         st.dataframe(dd, width='stretch')
@@ -303,9 +332,11 @@ def run_app():
     # ---- disclaimer ----
     st.divider()
     st.caption(
-        "⚠️ **研究用途声明**：本工具为科研演示，基于单中心推导队列训练，预测结果"
-        "**不能替代临床判断或作为诊断依据**。跨中心使用时需注意特征分布差异"
-        "（如残余狭窄率在不同中心的系统性偏移），建议结合本地数据谨慎解读。"
+        "⚠️ **Research-use disclaimer**: This tool is a research demonstration trained on a "
+        "single-center derivation cohort. Its predictions **must not replace clinical judgment "
+        "or serve as a diagnostic basis**. When applied across centers, be aware of differences "
+        "in feature distributions (e.g. systematic shifts in residual stenosis rate between "
+        "centers) and interpret results cautiously together with local data."
     )
 
 
