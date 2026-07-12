@@ -172,35 +172,57 @@ def run_app():
         "修改输入后，请点击 **🔄 更新预测结果** 刷新。"
     )
 
-    # ---- ① inputs (key-only widgets so edits land in session_state) ----
+    # ---- ① inputs (inside a FORM so typed values are committed on submit) ----
     st.markdown('<div class="section-title">① 输入特征</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hint">可直接键入数值或用 +/- 微调；改完后点表单底部的'
+        ' <b>🔄 更新预测结果</b>（表单内所有修改会在此刻一次性提交）。'
+        '输入框上下限按各特征的<b>实际可能取值范围</b>设定；若取值超出训练集范围，'
+        '结果区会给出「外推预警」，提示预测为外推、请谨慎解读。</div>',
+        unsafe_allow_html=True,
+    )
     # initialize widget keys once (only first render)
     for f in feats:
         if f"in_{f}" not in st.session_state:
             st.session_state[f"in_{f}"] = medians[f]
-    cols = st.columns(2)
-    for i, f in enumerate(feats):
-        s = stats[f]
-        with cols[i % 2]:
-            step = 0.1 if f == "TC" else 0.001
-            st.number_input(
-                label=f"**{disp[f]}**  ({descr[f]})",
-                min_value=float(s["min"]), max_value=float(s["max"]),
-                step=step, format="%.4f",
-                key=f"in_{f}",
-                help=f"单位：{units[f]}；训练集范围 {s['min']:.3f}–{s['max']:.3f}",
-            )
 
-    # ---- action buttons (plain buttons; compute in the MAIN script body) ----
-    # NOTE: we deliberately avoid on_click callbacks that write widget keys,
-    # because recent Streamlit ignores widget-key writes inside callbacks.
-    b1, b2 = st.columns([1, 1])
-    with b1:
-        update_clicked = st.button("🔄 更新预测结果", type="primary", width='stretch')
-    with b2:
-        reset_clicked = st.button("↩ 重置为中位数", width='stretch')
+    # Hard bounds = the physically / clinically *possible* range of each feature
+    # (not the training-set min/max). Values can still be typed outside the
+    # training range -> flagged as extrapolation in the results section.
+    BOUNDS = {
+        "Mean_nwi_Total": (0.0, 1.0),          # normalized wall index, dimensionless 0–1
+        "Max_nwi_Total": (0.0, 1.0),           # normalized wall index, dimensionless 0–1
+        "Residual_stenosis_rate": (0.0, 1.0),  # proportion (0–1)
+        "Mean_lumen_area(mm²)_Total": (0.0, 30.0),  # mm², generous clinical headroom
+        "wavelet-HLL_glcm_Correlation": (0.0, 1.0),  # correlation coefficient 0–1
+        "original_shape_Flatness": (0.0, 1.0),       # flatness 0–1
+        "TC": (0.0, 30.0),                     # total cholesterol, mmol/L (clinical extreme)
+    }
+
+    with st.form("input_form", clear_on_submit=False):
+        cols = st.columns(2)
+        for i, f in enumerate(feats):
+            s = stats[f]
+            with cols[i % 2]:
+                step = 0.1 if f == "TC" else 0.001
+                lo, hi = BOUNDS[f]
+                st.number_input(
+                    label=f"**{disp[f]}**  ({descr[f]})",
+                    min_value=float(lo), max_value=float(hi),
+                    step=step, format="%.4f",
+                    key=f"in_{f}",
+                    help=f"单位：{units[f]}；允许范围 {lo:.3f}–{hi:.3f}；"
+                         f"训练集范围 {s['min']:.3f}–{s['max']:.3f}",
+                )
+        update_clicked = st.form_submit_button(
+            "🔄 更新预测结果", type="primary", width='stretch')
+
+    # ---- reset button (OUTSIDE the form; plain buttons aren't allowed in forms) ----
+    reset_clicked = st.button("↩ 重置为中位数", width='stretch')
 
     if update_clicked:
+        # Inside a form, ALL widget edits (typed or +/-) are committed to
+        # session_state exactly when the submit button fires -> read them here.
         vals = {f: float(st.session_state[f"in_{f}"]) for f in feats}
         res = predict(pipeline, vals)
         st.session_state.result = res
@@ -212,13 +234,19 @@ def run_app():
     if reset_clicked:
         # flip the flag; the actual reset runs at the top of the next script run
         st.session_state._reset_pending = True
+        st.rerun()
 
     res = st.session_state.result
 
-    # stale-input hint (edits are live in session_state, so this is accurate)
-    current = {f: float(st.session_state[f"in_{f}"]) for f in feats}
-    if current != st.session_state.submitted:
-        st.info("⚠️ 输入已修改，点击「🔄 更新预测结果」以刷新预测。")
+    # ---- extrapolation warning: any submitted value outside training range ----
+    oor = [disp[f] for f in feats
+           if st.session_state.submitted[f] < stats[f]["min"]
+           or st.session_state.submitted[f] > stats[f]["max"]]
+    if oor:
+        st.warning(
+            "⚠️ 以下特征的当前取值**超出训练集范围**，预测属于外推，结果请谨慎解读："
+            + "、".join(oor)
+        )
 
     # ---- ② results ----
     st.markdown('<div class="section-title">② 预测结果</div>', unsafe_allow_html=True)
@@ -257,7 +285,7 @@ def run_app():
         f"推移到模型输出 **f(x) = {res['prob']:.3f}**。红色段=特征值偏高，蓝色段=偏低；"
         f"各段按特征值大小着色。"
     )
-    st.pyplot(st.session_state.shap_fig, use_container_width=True)
+    st.pyplot(st.session_state.shap_fig, width='stretch')
 
     with st.expander("查看特征贡献明细"):
         st.dataframe(st.session_state.shap_df, width='stretch')
