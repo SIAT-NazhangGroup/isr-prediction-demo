@@ -30,7 +30,7 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 FEATURES_7 = ["Mean_nwi_Total", "Residual_stenosis_rate", "Mean_lumen_area(mm²)_Total",
               "wavelet-HLL_glcm_Correlation", "original_shape_Flatness", "Max_nwi_Total", "TC"]
 DISPLAY = {"Mean_nwi_Total": "Mean_nwi_Total", "Residual_stenosis_rate": "Residual_stenosis_rate",
-           "Mean_lumen_area(mm²)_Total": "Mean_lumen_area", "wavelet-HLL_glcm_Correlation": "wavelet-HLL_glcm_Correlation",
+           "Mean_lumen_area(mm²)_Total": "Mean_lumen_area_Total", "wavelet-HLL_glcm_Correlation": "wavelet-HLL_glcm_Correlation",
            "original_shape_Flatness": "original_shape_Flatness", "Max_nwi_Total": "Max_nwi_Total", "TC": "TC"}
 LABEL = "Label"
 
